@@ -1,6 +1,6 @@
 ---
 name: xiaoyu-tabview
-description: 将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现、以及新旧版开关共存。Migrate a legacy TabView to the iOS 26 beautiful tab bar (independent search tab + bottom action button + bottom search): decision principles, per-page behavior mapping, and known iOS 26/27 search-placement pitfalls.
+description: "将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现、以及新旧版开关共存。Migrate a legacy TabView to the iOS 26 beautiful tab bar (independent search tab + bottom action button + bottom search): decision principles, per-page behavior mapping, and known iOS 26/27 search-placement pitfalls."
 ---
 
 # iOS 26 精美 TabView 改造
