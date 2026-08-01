@@ -93,7 +93,7 @@ private func warmupSearchTab(returnTo target: Int) {
 
 ## 与 iPad 双模式副屏联动（可选增强）
 
-当 App 在 iPad 横屏采用“主屏 TabView + 右侧副屏详情”双模式时，精美 TabView 的控件要与副屏联动，否则控件（搜索、长条按钮）和内容会“分家”。要点（均为通用做法）：
+当 App 在横屏（iPhone / iPad 一致）采用“主屏 TabView + 右侧副屏详情”双模式时，精美 TabView 的控件要与副屏联动，否则控件（搜索、长条按钮）和内容会“分家”。副屏开关不要限制设备（`showSidebar = isLandscape`，不加 `userInterfaceIdiom == .pad`，否则 iPhone 横屏只拉伸不出副屏）。要点（均为通用做法）：
 
 - **焦点跟随**：共享状态记录当前焦点在主屏还是副屏；长条按钮显示焦点所在侧的内容（副屏有详情 → 显示详情操作；否则显示主屏按钮）。打开详情时把焦点切到副屏；触摸/滚动主屏内容区时切回主屏（手势用 `DragGesture(minimumDistance: 0).onChanged`，`onEnded` 不灵敏；只挂内容区、不挂标签栏，避免点搜索按钮时抢焦点）。
 - **搜索进副屏**：横屏点搜索 → 搜索改在右侧副屏呈现（用系统原生 `.searchable`，自带灵动动画），左侧保持当前主标签；焦点在副屏详情 → 搜该详情内容，否则搜主屏当前页。切换主标签时退出搜索。
