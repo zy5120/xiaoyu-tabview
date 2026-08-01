@@ -1,0 +1,4 @@
+interface:
+  display_name: "小鱼TabView"
+  short_description: "传统 TabView 改造为 iOS 26 精美标签栏（底部长条按钮+底部搜索）的决策原则与实现要点"
+  default_prompt: "把传统 TabView 改造成 iOS 26 新版精美标签栏"
