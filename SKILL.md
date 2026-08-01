@@ -13,9 +13,9 @@ description: "将传统 TabView（3 个标签 + 右上角加号/搜索）改造�
 
 ```swift
 TabView(selection: $selectedTab) {
-    Tab("案件", systemImage: "folder", value: 0) { CasesList() }
-    Tab("待办", systemImage: "checklist", value: 1) { Todos() }
-    Tab("更多", systemImage: "ellipsis.circle", value: 2) { More() }
+    Tab("列表", systemImage: "folder", value: 0) { MainListPage() }
+    Tab("待办", systemImage: "checklist", value: 1) { TodosPage() }
+    Tab("更多", systemImage: "ellipsis.circle", value: 2) { MorePage() }
     Tab(value: 3, role: .search) { searchContent }   // 独立搜索标签，固定在最右侧
 }
 .tabViewSearchActivation(.searchTabSelection)   // 搜索标签独立：点按后标签栏收起、搜索框从右侧向左展开
@@ -91,6 +91,18 @@ private func warmupSearchTab(returnTo target: Int) {
 
 要点：预热期间 `onChange(of: selectedTab)` 里禁止 `requestFocus()`（否则弹键盘）；预热仅 iPhone 需要，iPad 走原生可跳过。
 
+## 与 iPad 双模式副屏联动（可选增强）
+
+当 App 在 iPad 横屏采用“主屏 TabView + 右侧副屏详情”双模式时，精美 TabView 的控件要与副屏联动，否则控件（搜索、长条按钮）和内容会“分家”。要点（均为通用做法）：
+
+- **焦点跟随**：共享状态记录当前焦点在主屏还是副屏；长条按钮显示焦点所在侧的内容（副屏有详情 → 显示详情操作；否则显示主屏按钮）。打开详情时把焦点切到副屏；触摸/滚动主屏内容区时切回主屏（手势用 `DragGesture(minimumDistance: 0).onChanged`，`onEnded` 不灵敏；只挂内容区、不挂标签栏，避免点搜索按钮时抢焦点）。
+- **搜索进副屏**：横屏点搜索 → 搜索改在右侧副屏呈现（用系统原生 `.searchable`，自带灵动动画），左侧保持当前主标签；焦点在副屏详情 → 搜该详情内容，否则搜主屏当前页。切换主标签时退出搜索。
+- **搜索结果联动**：点搜索结果 → 关闭搜索并把详情同步到全局状态（旋转不丢）。
+- **紧凑模式分区**：详情页内容加 `.environment(\.horizontalSizeClass, .compact)` 隐藏右上角与长条按钮重复的旧按钮；**搜索界面本身保持宽屏**（否则原生搜索框会消失）；搜索内容区可单独压缩，隐藏残留按钮；搜索时只保留一个关闭 X。
+- **副屏内容强制重建**：详情视图把对象 / 子标签存在 `@State` 时，切换对象要用 `.id(...)` 强制重建，否则 SwiftUI 复用同一视图、显示旧内容。
+- **导航目标挂栈内**：`navigationDestination` 必须挂在 `NavigationStack` 内部，否则“状态已更新但推不进去”。
+- **旋转恢复**：每个主标签都要注册恢复联动（记录来源标签），否则从该标签进入的详情旋转后丢失。
+
 ## 已知系统坑（iOS 26/27，务必规避）
 
 1. **首次激活搜索框被放到页面顶部**（iPhone）：根因是搜索框注册时机与标签栏搜索容器初始化竞态；每次“第一次进搜索”都可能复发，第二次点才正常。
@@ -100,7 +112,8 @@ private func warmupSearchTab(returnTo target: Int) {
 2. **iPad 上搜索框只能在右上角**：搜索标签的底部变形（morph）是 iPhone 运行时特性；iPadOS 26 设计就是顶部/右上角，没有公开 API 强制到底部。
    - `.tabViewStyle(.tabBarOnly)` 在 iPad 上不强制底部（实测无效）。
    - `.environment(\.horizontalSizeClass, .compact)` 能把标签栏压到底部，但窗口拉伸时内容会变形，且破坏 iPad 自由缩放。
-   - **推荐：iPad 保持系统原生**（自适应标签栏 + 右上角搜索），只对 iPhone 做精美版；除非用户明确要“跑 iPhone 软件”（iPhone 专用 App，窗口固定不可缩放）。
+   - **无副屏时：iPad 保持系统原生**（自适应标签栏 + 右上角搜索）；除非用户明确要“跑 iPhone 软件”（iPhone 专用 App，窗口固定不可缩放）。
+   - **有横屏副屏时**：不硬把底部搜索塞进 iPad，改用“搜索进副屏 + 焦点跟随”联动（见上一节）。
 
 ## 工作流
 
