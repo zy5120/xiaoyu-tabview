@@ -61,6 +61,8 @@ TabView(selection: $selectedTab) {
 4. iPhone 加启动预热；iPad 保持原生。
 5. 真机验证：每个页面**第一次**点搜索都必须在底部展开；长条按钮功能与原右上角一致；开关切回传统版完全还原。
 
+遇到无法确认页面形式的页面：先把该页面及其候选行为列成清单交给开发者决定，不要擅自猜测。
+
 ## 参考
 
-- 具体页面映射示例（长条按钮 / 搜索上下文表）：见 [references/example-mapping.md](references/example-mapping.md)。
+- 通用页面类型映射与兜底决策流程：见 [references/example-mapping.md](references/example-mapping.md)。
