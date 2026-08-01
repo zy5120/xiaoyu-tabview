@@ -1,6 +1,6 @@
 ---
 name: xiaoyu-tabview
-description: 将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现、以及新旧版开关共存。
+description: 将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现、以及新旧版开关共存。Migrate a legacy TabView to the iOS 26 beautiful tab bar (independent search tab + bottom action button + bottom search): decision principles, per-page behavior mapping, and known iOS 26/27 search-placement pitfalls.
 ---
 
 # iOS 26 精美 TabView 改造
@@ -42,6 +42,55 @@ TabView(selection: $selectedTab) {
 - 所有页面共享同一个搜索文本绑定；过滤逻辑留在各页面内。
 - 点搜索结果后自动退出搜索，返回原主标签。
 
+## 核心代码（已实测可用的最小骨架）
+
+### 1. 单一稳定搜索容器 + 上下文状态
+
+```swift
+// 搜索上下文：每页出现时登记“搜什么”，搜索文本全局共享
+@Observable final class SearchContextState {
+    var current: PageContext = .list      // 当前页面上下文（决定搜索内容与提示）
+    var searchText = ""                   // 唯一搜索框的共享文本
+    var focusToken = 0                    // 进入搜索标签时 +1，触发底部框聚焦
+    var closeToken = 0                    // 搜索结果点击后返回原主标签
+}
+
+// 搜索标签内容：搜索框只注册一次；切换页面只换内部内容，绝不重建外层
+Tab(value: 3, role: .search) {
+    NavigationStack {
+        pageContentForCurrentContext      // 按 searchContext.current 切换的内容
+    }
+    .searchable(text: $searchContext.searchText, prompt: promptForCurrentContext)
+}
+.tabViewSearchActivation(.searchTabSelection)
+```
+
+页面登记示例（`onAppear` 时调用）：列表页 `.list`、详情页 `.detail`、子列表 `.subList`、更多入口 `.settings`；纯表单页不登记搜索（隐藏搜索按钮）。
+
+### 2. 启动预热（规避 iOS 26/27 首次激活搜索框跑顶部）
+
+```swift
+// 启动时隐藏整个界面，把搜索标签“选中→切走→再选中”，等效系统第二次点击，再显示默认页
+private func warmupSearchTab(returnTo target: Int) {
+    isWarmingUp = true
+    revealContent = false
+    selectedTab = 3
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        selectedTab = target
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            selectedTab = 3
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                selectedTab = target
+                isWarmingUp = false
+                revealContent = true
+            }
+        }
+    }
+}
+```
+
+要点：预热期间 `onChange(of: selectedTab)` 里禁止 `requestFocus()`（否则弹键盘）；预热仅 iPhone 需要，iPad 走原生可跳过。
+
 ## 已知系统坑（iOS 26/27，务必规避）
 
 1. **首次激活搜索框被放到页面顶部**（iPhone）：根因是搜索框注册时机与标签栏搜索容器初始化竞态；每次“第一次进搜索”都可能复发，第二次点才正常。
@@ -66,3 +115,4 @@ TabView(selection: $selectedTab) {
 ## 参考
 
 - 通用页面类型映射与兜底决策流程：见 [references/example-mapping.md](references/example-mapping.md)。
+- 相关技能：iPad 自适应双模式布局（竖屏 sheet/推入、横屏侧栏）→ `小鱼平板适配forOS26`（~/.agents/skills/小鱼平板适配forOS26）
