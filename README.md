@@ -25,3 +25,33 @@
 在派生产物（文档、代码、技能文件）中请包含以上署名与许可证文本。
 
 Copyright © 2026 zy5120
+
+---
+
+# 小鱼 TabView (xiaoyu-tabview) — English
+
+Decision principles and implementation notes for migrating a legacy TabView (3 tabs + top-right add/search) to the iOS 26 beautiful tab bar: an independent search tab, a bottom long action button (`tabViewBottomAccessory`), and bottom search. Covers the long-button takeover rules, search context per page, known iOS 26/27 pitfalls, and portrait drill-path navigation.
+
+> Extracted from the "鱼律 / yulawyer" iOS app (iOS 26+).
+
+## Companion Skill
+
+This skill works **together with [小鱼平板适配forOS26 / iPad Adaptive Layout](https://github.com/zy5120/ipad-adaptive-layout-ios26)** (portrait sheet/push + landscape sidebar):
+
+1. First adapt the page's dual-mode layout with the iPad skill (portrait sheet/push, landscape sidebar);
+2. Then adapt the beautiful TabView's bottom action button and search with this skill (button follows focus, search moves to the sidebar, etc.).
+
+Each skill owns one layer: one handles layout & rotation, the other handles the bottom controls & search. Follow this order when adapting any page.
+
+## License
+
+This project is licensed under the **Apache License 2.0**.
+
+**Attribution required**: any use, invocation, copy, or adaptation of this skill (including using it as development guidelines, generating code/content, or integrating it into other skills/projects) must retain this copyright notice and credit the source:
+
+- Repository: <https://github.com/zy5120/xiaoyu-tabview>
+- Author: zy5120 (鱼律 / yulawyer)
+
+Please include the attribution and the license text in derived works (docs, code, skill files).
+
+Copyright © 2026 zy5120
