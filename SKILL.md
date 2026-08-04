@@ -1,6 +1,6 @@
 ---
 name: xiaoyu-tabview
-description: "将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现、以及新旧版开关共存。Migrate a legacy TabView to the iOS 26 beautiful tab bar (independent search tab + bottom action button + bottom search): decision principles, per-page behavior mapping, and known iOS 26/27 search-placement pitfalls."
+description: "将传统 TabView（3 个标签 + 右上角加号/搜索）改造为 iOS 26 新版精美标签栏（独立搜索标签 + 底部长条操作按钮 + 底部搜索）的决策原则与实现要点。适用于：用户要求“把 TabView 改成新版/精美样式/底部操作按钮/底部搜索”、设计长条按钮或搜索行为、处理 iOS 26/27 搜索框首次激活跑到顶部的位置 bug、决定 iPad 上标签栏与搜索的表现。鱼律已决定一律新版、不再保留传统版开关。Migrate a legacy TabView to the iOS 26 beautiful tab bar (independent search tab + bottom action button + bottom search): decision principles, per-page behavior mapping, and known iOS 26/27 search-placement pitfalls."
 ---
 
 # iOS 26 精美 TabView 改造
@@ -25,8 +25,8 @@ TabView(selection: $selectedTab) {
 
 要点：
 - 搜索标签用**一个稳定容器 + 唯一一个 `.searchable`**；切换页面只换容器内部内容，绝不重建搜索框（`id()` 重建会反复触发系统位置 bug）。
-- 用开关（如 `@AppStorage("showFab")`）在“传统版 / 新版”之间切换：关闭时完全还原传统 3 标签 + 右上角按钮。
-- iPhone 与 iPad 分开对待：iPhone 用精美版；iPad 保持系统原生（见“已知系统坑”）。
+- **不再保留传统版开关**：鱼律已决定“以后一律用新版”，删除 `showFab` 开关与旧 3 标签 TabView；旧版兼容代码（`legacyTabBar`、`horizontalSizeClass == .regular || !showFab` 之类的条件、右上角重复按钮的旧逻辑）一并移除。若未来要加回传统版，需同时恢复：旧 TabView、右上角 +/搜索按钮、旧按钮在详情/表单页的显隐条件，并处理横屏副屏下旧式 push 的钻取路由（旧式在横屏 + 更多页钻取存在路由缺口，见下文）。
+- iPhone 与 iPad 一致用精美版：左栏内容套 `.compact` 强制底部标签栏（鱼律当前做法，以代码为准）；若某 App 希望 iPad 保持原生标签栏，取舍见“已知系统坑”。
 
 ## 原则一：长条按钮 = 原页面右上角的主操作
 
@@ -34,13 +34,22 @@ TabView(selection: $selectedTab) {
 - 新版开启时，右上角**不再重复显示**这些按钮；非主操作图标（如删除）可保留在右上角。
 - 列表页 → “新建 X”（多个新建用 `Menu` 弹出，选项顺序与旧版一致）；详情页 → “编辑 / 关联 / 分享”；表单页 → “保存 / 执行查询”；没有主操作的页 → 装饰或高频入口。
 - 搜索态时，长条按钮保留用户进入搜索前那个页面的按钮（不消失）。
+- **灵活接管规则**：先看当前页右上角有没有功能——有，则长条按钮 = 该功能（同时隐藏右上角按钮）；右上角没有功能，再看左上角是什么（一般是返回），长条按钮 = 返回。
+- **操作完成后的回退**：点长条按钮执行右上角功能（如“保存”）后，页面会关闭并返回上一页；此时长条按钮必须**跟随返回后的页面**——上一页有右上角功能就显示它，否则显示“返回”（左上角）。实现上靠页面 `onDisappear` 清掉已注册的保存动作（`pad.saveEditAction = nil`），否则长条按钮会一直卡在“保存”。校验每个带保存的表单页：保存后必须回退到上一页且按钮状态复原。
+- **跨标签跟随**：长条按钮跟随“当前正在看的页面”，不跟标签。例如从待办/更多进入的案件详情，长条按钮应显示该详情的操作（编辑案件/添加时间线/关联文件），而不是待办的“新建待办”或更多的“新增委托人”；详情关闭后恢复标签页自己的按钮。
+- 判定用「该页是否注册了主操作」（如 `pad.saveEditAction != nil`）统一驱动，不只局限详情编辑页；更多钻取内打开的编辑页（编辑个人信息等）也要注册保存动作，底部长条显示“保存”而不是“返回”。
+- 自带导航栈的钻取页（编辑个人信息 / 云同步诊断 / 隐私政策等）不要在左屏推入时重复添加左上角按钮（外层导航已有返回）；只有横屏右屏首层才由页面自供返回（`moreDrillRole == .current && stack.count == 1`）。
+- **保存关闭的经典竞态（“保存后又弹出来”）**：更多钻取内带保存的编辑页，关闭时必须**先弹出钻取栈（`pad.moreDrillBack()`）再 `dismiss()`**。否则 `dismiss()` 先把外层推入弹掉，而钻取栈要到下一次状态更新才弹出，返回瞬间更多页 `onAppear` 看到栈仍非空，会把编辑页重新推回来。只 `dismiss()` 不弹栈 = 大概率复现。**路径导航下**：弹出钻取栈后路径会自动同步重建，`dismiss()` 冗余但无害，可省略。
+- **嵌套 NavigationStack 破坏 dismiss（“保存后返回错乱”）**：竖屏 push 的表单页（时间线节点 / 待办 / 案件节点的新增与编辑）绝不能自带 `NavigationStack`——被推入外层导航栈时再套一层内嵌栈会让 `dismiss()` 行为不可靠（返回错位/不返回）。正确写法：`presentedAsSheet == true` 时才包 `NavigationStack`，推入模式直接渲染 `Form`（导航栏由外层承担，与编辑案件页一致）。同时这些表单必须在 `onDisappear` 里清掉 `pad.saveEditAction = nil`，否则底部按钮卡在“保存”。
+- **竖屏钻取页导航的正确架构（路径导航，已验证）**：更多页竖屏导航必须用 `NavigationStack(path:)` + 统一路由（`enum MoreDrillRoute { case page(MoreDrillPage), detail(DetailSelection) }`）。**不要用多个 item 绑定**（多层推入会“替换”层级，左滑直接跳层）、**不要嵌套 NavigationStack**（双返回按钮）。钻取页 = `.page` 元素、子详情 = `.detail` 元素，全部走同一个 path；`Binding<DetailSelection?>` 用桥接 binding 映射到 path 追加/弹出 `.detail`；旋转恢复、嵌套 push（详情内编辑）、外部关闭详情分别用 `onChange(of: pad.isSidebar / pendingPushToken / detailSelection)` 同步。左滑返回逐级正确且每层只有一个返回按钮。
 
 ## 原则二：搜索 = 搜当前页面正在展示的数据
 
 - 每个页面出现时登记自己的“搜索上下文”；点搜索标签时，稳定容器按上下文切换内容，提示文字（prompt）跟着变。
-- 列表 / 详情页有内容可搜就搜自己；**纯表单页（新建 / 编辑 / 设置操作表单）隐藏搜索按钮**，不要硬搜无关内容（如“表单页搜案件列表”属于错误回退）。
+- 列表 / 详情页有内容可搜就搜自己；**纯表单页（新建 / 编辑 / 设置操作表单）点击搜索无反应**，不要硬搜无关内容（如“表单页搜案件列表”属于错误回退）。
 - 所有页面共享同一个搜索文本绑定；过滤逻辑留在各页面内。
 - 点搜索结果后自动退出搜索，返回原主标签。
+- **不适合搜索的页面 → 点击搜索无反应**：统一在根视图判断「当前页面是否适合搜索」（`isCurrentPageSearchable`）——编辑/新建表单（`pad.isEditSelection || pad.saveEditAction != nil || pad.drillFormTitle != nil`）、更多钻取内的纯工具/设置子页（云同步诊断、备份恢复、偏好设置、模板编辑、限高查询等）都不适合，选中搜索标签时直接重定向回原标签，不展开搜索框。只有列表页（案件/待办/委托人/文书）、案件详情、更多首页可搜。限高查询等查询页**绝不能**把上下文注册成别的列表（曾犯过注册成 `.cases` 的错）。
 
 ## 核心代码（已实测可用的最小骨架）
 
@@ -51,7 +60,6 @@ TabView(selection: $selectedTab) {
 @Observable final class SearchContextState {
     var current: PageContext = .list      // 当前页面上下文（决定搜索内容与提示）
     var searchText = ""                   // 唯一搜索框的共享文本
-    var focusToken = 0                    // 进入搜索标签时 +1，触发底部框聚焦
     var closeToken = 0                    // 搜索结果点击后返回原主标签
 }
 
@@ -65,31 +73,46 @@ Tab(value: 3, role: .search) {
 .tabViewSearchActivation(.searchTabSelection)
 ```
 
-页面登记示例（`onAppear` 时调用）：列表页 `.list`、详情页 `.detail`、子列表 `.subList`、更多入口 `.settings`；纯表单页不登记搜索（隐藏搜索按钮）。
+页面登记示例（`onAppear` 时调用）：列表页 `.list`、详情页 `.detail`、子列表 `.subList`、更多入口 `.settings`；纯表单页不登记搜索（点击搜索无反应）。
 
-### 2. 启动预热（规避 iOS 26/27 首次激活搜索框跑顶部）
+### 2. 点搜索“只展开、不弹键盘”（键盘抑制窗口）
+
+`.searchTabSelection` 的语义是“选中搜索标签即激活搜索框”，系统会在选中瞬间自动聚焦并弹键盘。App 层关不掉（见“已知系统坑”），但可以在**选中后的短暂窗口内把弹出动作压回去**：
 
 ```swift
-// 启动时隐藏整个界面，把搜索标签“选中→切走→再选中”，等效系统第二次点击，再显示默认页
-private func warmupSearchTab(returnTo target: Int) {
-    isWarmingUp = true
-    revealContent = false
-    selectedTab = 3
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-        selectedTab = target
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            selectedTab = 3
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                selectedTab = target
-                isWarmingUp = false
-                revealContent = true
-            }
-        }
+// SearchContextState
+var suppressKeyboardUntil = Date.distantPast
+func armSearchKeyboardSuppression() { suppressKeyboardUntil = Date().addingTimeInterval(0.8) }
+func shouldSuppressKeyboard() -> Bool { Date() < suppressKeyboardUntil }
+
+// ContentView：选中搜索标签（iPhone 竖屏）时启用抑制窗口
+.onChange(of: selectedTab) { _, newValue in
+    if newValue == 3, UIDevice.current.userInterfaceIdiom == .phone {
+        searchContext.armSearchKeyboardSuppression()
     }
+}
+
+// 根视图（能收到键盘通知的地方）：窗口内把键盘弹起动作取消
+.onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+    if searchContext.shouldSuppressKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+        return
+    }
+    // 正常键盘处理…
 }
 ```
 
-要点：预热期间 `onChange(of: selectedTab)` 里禁止 `requestFocus()`（否则弹键盘）；预热仅 iPhone 需要，iPad 走原生可跳过。
+效果：点搜索 → 搜索框向左展开、不弹键盘；0.8s 窗口过后用户点进输入框，键盘正常弹出。
+
+### 3. 启动预热（旧方案，仅 iOS 26 仍复现时才需要）
+
+实测结论（iOS 26/27 + 单一稳定容器）：**不再需要启动预热**。旧方案是在启动时“选中搜索标签 → 切走 → 再选中”来等效“第二次点击”，但每次选中都会触发搜索框展开动画 + 键盘激活尝试，导致开屏闪烁（启动 Logo / 遮罩都挡不干净，键盘在系统窗口层）。鱼律已在 iOS 27 实测移除预热后首次点搜索位置正常。
+
+若目标设备仍复现“首次激活跑顶部”且必须保留预热：
+- 必须用**独立 UIWindow（`windowLevel = .alert + 1`）**做全屏静态遮罩盖住预热动画（普通 `.overlay` 层级不够，动画会透出来）；键盘弹起属于系统窗口，遮罩挡不住，仍需配合上面的键盘抑制窗口。
+- 预热期间 `onChange(of: selectedTab)` 里禁止任何请求焦点逻辑（否则弹键盘）。
+- 仅 iPhone 需要；iPad 走原生可跳过。
 
 ## 与 iPad 双模式副屏联动（可选增强）
 
@@ -106,22 +129,25 @@ private func warmupSearchTab(returnTo target: Int) {
 ## 已知系统坑（iOS 26/27，务必规避）
 
 1. **首次激活搜索框被放到页面顶部**（iPhone）：根因是搜索框注册时机与标签栏搜索容器初始化竞态；每次“第一次进搜索”都可能复发，第二次点才正常。
-   - 规避 A：单一稳定 `.searchable`（挂在固定容器上，内容在内部切换）。
-   - 规避 B：启动预热——先隐藏整个界面，`selectedTab = 3`，等 ~0.2s 切回默认页，再等 ~0.2s 再次选中搜索标签，最后切回默认页并显示。等效“第二次点击”，让注册落点正确；预热期间禁止请求焦点（否则弹键盘）。
-   - 预热只对 iPhone 需要；iPad 走原生，跳过预热以保持秒开。
-2. **iPad 上搜索框只能在右上角**：搜索标签的底部变形（morph）是 iPhone 运行时特性；iPadOS 26 设计就是顶部/右上角，没有公开 API 强制到底部。
+   - **首选规避 A：单一稳定 `.searchable`（挂在固定容器上，内容在内部切换），已实测足以解决，无需预热**。鱼律在 iOS 27 上移除预热后冷启动首次点搜索位置正常。
+   - 规避 B（启动预热）仅在 A 不够、bug 仍复现时启用；启用会带来开屏闪烁（搜索标签展开动画 + 键盘激活尝试），需配最高层级 UIWindow 遮罩 + 键盘抑制窗口（见上文）。
+2. **选中搜索标签必然触发键盘激活，App 层关不掉**：`.searchTabSelection` 官方语义就是“选中即激活”。UIKit 的 `UISearchTab.automaticallyActivatesSearch = false` 虽能“只展开不聚焦”，但 SwiftUI 会在每次刷新时把它改回 `true`（实测日志铁证），因此该开关对 SwiftUI TabView 无效。想要“展开不弹键盘”，只能靠选中后的短窗口键盘抑制（见上文）。
+3. **iPad 上搜索框只能在右上角**：搜索标签的底部变形（morph）是 iPhone 运行时特性；iPadOS 26 设计就是顶部/右上角，没有公开 API 强制到底部。
    - `.tabViewStyle(.tabBarOnly)` 在 iPad 上不强制底部（实测无效）。
    - `.environment(\.horizontalSizeClass, .compact)` 能把标签栏压到底部，但窗口拉伸时内容会变形，且破坏 iPad 自由缩放。
-   - **无副屏时：iPad 保持系统原生**（自适应标签栏 + 右上角搜索）；除非用户明确要“跑 iPhone 软件”（iPhone 专用 App，窗口固定不可缩放）。
-   - **有横屏副屏时**：不硬把底部搜索塞进 iPad，改用“搜索进副屏 + 焦点跟随”联动（见上一节）。
+   - **鱼律的实际做法（以代码为准）**：左栏内容一律 `.environment(\.horizontalSizeClass, .compact)`——iPad（含无副屏竖屏）也用 iPhone 式底部标签栏，与 iPhone 完全一致；横屏副屏时标签栏在左栏底部，“搜索进副屏 + 焦点跟随”联动（见上一节）。
+   - 若某 App 不想要底部标签栏、希望 iPad 保持系统原生（自适应标签栏 + 右上角搜索），则不要对左栏套 compact；两种方案按产品需求取舍。
+4. **List 行按钮点击被“焦点跟随”手势吞掉（iOS 26）**：内容区挂的 `DragGesture(minimumDistance: 0)`（焦点跟随）会让部分设备（iOS 26，iPhone Air 的 iOS 27 正常）上 List 默认样式的行按钮点击失效（更多页、备份恢复页整页点不动）。案件列表能点是因为行按钮用了 `.buttonStyle(.plain)`。
+   - 修复：行按钮统一用**自定义纯 SwiftUI 样式**（`contentShape(Rectangle())` 保证整行可点 + 按压反馈），不要用 List 默认行按钮样式；应用在更多页及其钻取子页（备份恢复等）的 List 上。
+   - 判据：同一页里“纯文本可点、整行点不动 / 整页点不动”都是这个坑。
 
 ## 工作流
 
-1. 确认是否需要新旧版开关共存（建议默认新版、可回退）。
-2. 逐个页面：找到右上角主操作 → 映射为长条按钮；确定搜索上下文（列表页搜自己、表单页隐藏）。
+1. 一律新版，**不做**新旧版开关共存（鱼律已摒弃传统版，`showFab`/`legacyTabBar` 已删除）。
+2. 逐个页面：先看右上角主操作 → 映射为长条按钮；没有右上角再看左上角（返回）；确定搜索上下文（列表页搜自己、表单页点击无反应）。
 3. 实现稳定搜索容器 + 各页面上下文登记（`onAppear` 时设置）。
-4. iPhone 加启动预热；iPad 保持原生。
-5. 真机验证：每个页面**第一次**点搜索都必须在底部展开；长条按钮功能与原右上角一致；开关切回传统版完全还原。
+4. 无需启动预热（单一稳定容器已解决首次激活位置 bug）；iPad 与 iPhone 一致（左栏 compact 底部标签栏）。
+5. 真机验证：每个页面**第一次**点搜索都必须在底部展开；长条按钮功能与原右上角一致，保存后按钮状态复原；每个页面左上角只有一个返回按钮。
 
 遇到无法确认页面形式的页面：先把该页面及其候选行为列成清单交给开发者决定，不要擅自猜测。
 
