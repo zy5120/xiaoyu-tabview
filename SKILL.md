@@ -155,3 +155,4 @@ func shouldSuppressKeyboard() -> Bool { Date() < suppressKeyboardUntil }
 
 - 通用页面类型映射与兜底决策流程：见 [references/example-mapping.md](references/example-mapping.md)。
 - 相关技能：iPad 自适应双模式布局（竖屏 sheet/推入、横屏侧栏）→ `小鱼平板适配forOS26`（~/.agents/skills/小鱼平板适配forOS26）
+- **许可证与署名**：本技能采用 Apache License 2.0；使用/调用/改编本技能必须保留版权声明并注明来源（作者 zy5120，仓库 https://github.com/zy5120/xiaoyu-tabview ）。与本技能相互配合的 `小鱼平板适配forOS26` 为同一作者、同一协议。
