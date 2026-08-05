@@ -118,7 +118,7 @@ func shouldSuppressKeyboard() -> Bool { Date() < suppressKeyboardUntil }
 
 当 App 在横屏（iPhone / iPad 一致）采用“主屏 TabView + 右侧副屏详情”双模式时，精美 TabView 的控件要与副屏联动，否则控件（搜索、长条按钮）和内容会“分家”。副屏开关不要限制设备（`showSidebar = isLandscape`，不加 `userInterfaceIdiom == .pad`，否则 iPhone 横屏只拉伸不出副屏）。要点（均为通用做法）：
 
-- **焦点跟随**：共享状态记录当前焦点在主屏还是副屏；长条按钮显示焦点所在侧的内容（副屏有详情 → 显示详情操作；否则显示主屏按钮）。打开详情时把焦点切到副屏；触摸/滚动主屏内容区时切回主屏（手势用 `DragGesture(minimumDistance: 0).onChanged`，`onEnded` 不灵敏；只挂内容区、不挂标签栏，避免点搜索按钮时抢焦点）。
+- **焦点跟随**：共享状态记录当前焦点在主屏还是副屏；长条按钮显示焦点所在侧的内容（副屏有详情 → 显示详情操作；否则显示主屏按钮）。打开详情时把焦点切到副屏；滚动主屏内容区时切回主屏。**手势必须用 `DragGesture(minimumDistance: 4).onChanged` 且只在值变化时赋值**（`if pad.focusedPane != .main { pad.focusedPane = .main }`）——`minimumDistance: 0` 会在按下瞬间触发状态变更，把整页点击（列表行 + 系统返回按钮）都取消掉（iOS 26 / iPadOS 27 / Mac 实测整页点不动的根因）。只挂内容区、不挂标签栏，避免点搜索按钮时抢焦点。
 - **搜索进副屏**：横屏点搜索 → 搜索改在右侧副屏呈现（用系统原生 `.searchable`，自带灵动动画），左侧保持当前主标签；焦点在副屏详情 → 搜该详情内容，否则搜主屏当前页。切换主标签时退出搜索。
 - **搜索结果联动**：点搜索结果 → 关闭搜索并把详情同步到全局状态（旋转不丢）。
 - **紧凑模式分区**：详情页内容加 `.environment(\.horizontalSizeClass, .compact)` 隐藏右上角与长条按钮重复的旧按钮；**搜索界面本身保持宽屏**（否则原生搜索框会消失）；搜索内容区可单独压缩，隐藏残留按钮；搜索时只保留一个关闭 X。
@@ -138,8 +138,9 @@ func shouldSuppressKeyboard() -> Bool { Date() < suppressKeyboardUntil }
    - **鱼律的实际做法（以代码为准）**：左栏内容一律 `.environment(\.horizontalSizeClass, .compact)`——iPad（含无副屏竖屏）也用 iPhone 式底部标签栏，与 iPhone 完全一致；横屏副屏时标签栏在左栏底部，“搜索进副屏 + 焦点跟随”联动（见上一节）。
    - 若某 App 不想要底部标签栏、希望 iPad 保持系统原生（自适应标签栏 + 右上角搜索），则不要对左栏套 compact；两种方案按产品需求取舍。
 4. **List 行按钮点击被“焦点跟随”手势吞掉（iOS 26）**：内容区挂的 `DragGesture(minimumDistance: 0)`（焦点跟随）会让部分设备（iOS 26，iPhone Air 的 iOS 27 正常）上 List 默认样式的行按钮点击失效（更多页、备份恢复页整页点不动）。案件列表能点是因为行按钮用了 `.buttonStyle(.plain)`。
-   - 修复：行按钮统一用**自定义纯 SwiftUI 样式**（`contentShape(Rectangle())` 保证整行可点 + 按压反馈），不要用 List 默认行按钮样式；应用在更多页及其钻取子页（备份恢复等）的 List 上。
-   - 判据：同一页里“纯文本可点、整行点不动 / 整页点不动”都是这个坑。
+   - **根因与根治**：手势 `minimumDistance: 0` 在按下瞬间触发状态变更（`focusedPane` 赋值 → 视图重绘）→ 取消整页点击（不止列表行，**系统返回按钮也会点不动**；iPadOS 27 / Mac / iOS 26 均实测）。**根治：手势改为 `minimumDistance: 4` 且仅在值变化时赋值**，点按不再触发、滚动仍触发焦点跟随。
+   - 兜底：行按钮用**自定义纯 SwiftUI 样式**（`contentShape(Rectangle())` 保证整行可点 + 按压反馈），不要用 List 默认行按钮样式；应用在更多页及其钻取子页（委托人管理 / 委托人案件 / 文书下载 / 备份恢复等）的 List 上。
+   - 判据：整页（含返回按钮）点不动 = 手势吞点击；仅文字可点 = 行按钮样式问题。
 
 ## 工作流
 
