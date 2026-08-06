@@ -35,10 +35,12 @@ TabView(selection: $selectedTab) {
 - 列表页 → “新建 X”（多个新建用 `Menu` 弹出，选项顺序与旧版一致）；详情页 → “编辑 / 关联 / 分享”；表单页 → “保存 / 执行查询”；没有主操作的页 → 装饰或高频入口。
 - 搜索态时，长条按钮保留用户进入搜索前那个页面的按钮（不消失）。
 - **灵活接管规则**：先看当前页右上角有没有功能——有，则长条按钮 = 该功能（同时隐藏右上角按钮）；右上角没有功能，再看左上角是什么（一般是返回），长条按钮 = 返回。
+- **推入的选择/子页面也要注册长条按钮（如文书文件选择页、案件选择页）**：凡是推入覆盖父页的页面，都必须 `onAppear` 注册自己的主操作（`pad.saveEditAction`/标题，如“下载”）、`onDisappear` 清空；否则长条按钮会残留父页的按钮（如列表页的“新增文书下载”），出现“右上角是新功能、底部却是父页按钮”的错位。带数量/禁用态的选择按钮（如“下载 (2)”）右上角保留，长条按钮复用同一动作并内部判空。
 - **操作完成后的回退**：点长条按钮执行右上角功能（如“保存”）后，页面会关闭并返回上一页；此时长条按钮必须**跟随返回后的页面**——上一页有右上角功能就显示它，否则显示“返回”（左上角）。实现上靠页面 `onDisappear` 清掉已注册的保存动作（`pad.saveEditAction = nil`），否则长条按钮会一直卡在“保存”。校验每个带保存的表单页：保存后必须回退到上一页且按钮状态复原。
+- **嵌套表单页的关闭清理（如 新建案件→添加委托人、案件表单→参与人表单）**：被推入的子表单页（新增/编辑委托人、参与人表单等）`onAppear` 注册 `pad.saveEditAction` 后，`onDisappear` 必须成对清理——但**只有“真正关闭”才清**（旋转/容器重建/被子页覆盖时不清，靠来源页的全局打开状态如 `addClientOpen`/`pickerAddClientOpen`/`partyEditContext` 判别：全局仍开着 = 存档草稿；全局已清 = 清 `pad.saveEditAction = nil`）。来源页（选择委托人）也要在 `onChange(showingAddClient==false)` 里**恢复自己的长条动作**（如“添加委托人”），在自身 `onDisappear` 里**清空**（整体关闭回列表时按钮必须还原为列表页按钮）；新建/编辑案件这类以 `detailSelection` 驱动的表单页可依赖根视图兜底：全局 `detailSelection` 变化离开表单/新增类页面（含副屏 X 整体关闭且子表单还在栈顶的情况）时，在根视图的 `onChange(of: detailSelection)` 里兜底清一次 `saveEditAction = nil`，防止任何关闭路径残留“保存”。
 - **跨标签跟随**：长条按钮跟随“当前正在看的页面”，不跟标签。例如从待办/更多进入的案件详情，长条按钮应显示该详情的操作（编辑案件/添加时间线/关联文件），而不是待办的“新建待办”或更多的“新增委托人”；详情关闭后恢复标签页自己的按钮。
 - 判定用「该页是否注册了主操作」（如 `pad.saveEditAction != nil`）统一驱动，不只局限详情编辑页；更多钻取内打开的编辑页（编辑个人信息等）也要注册保存动作，底部长条显示“保存”而不是“返回”。
-- 自带导航栈的钻取页（编辑个人信息 / 云同步诊断 / 隐私政策等）不要在左屏推入时重复添加左上角按钮（外层导航已有返回）；只有横屏右屏首层才由页面自供返回（`moreDrillRole == .current && stack.count == 1`）。
+- **钻取页不要自带 NavigationStack**（编辑个人信息 / 云同步诊断 / 隐私政策等已去除自身栈）：返回统一由外层提供（竖屏路径导航 / 横屏 MoreDrillPageView 按 `pageHasOwnNavigationStack == false` 自供返回按钮），页面只渲染内容；云同步诊断等页此前因嵌套栈出现“一点击自动返回 + 返回崩溃”。
 - **保存关闭的经典竞态（“保存后又弹出来”）**：更多钻取内带保存的编辑页，关闭时必须**先弹出钻取栈（`pad.moreDrillBack()`）再 `dismiss()`**。否则 `dismiss()` 先把外层推入弹掉，而钻取栈要到下一次状态更新才弹出，返回瞬间更多页 `onAppear` 看到栈仍非空，会把编辑页重新推回来。只 `dismiss()` 不弹栈 = 大概率复现。**路径导航下**：弹出钻取栈后路径会自动同步重建，`dismiss()` 冗余但无害，可省略。
 - **嵌套 NavigationStack 破坏 dismiss（“保存后返回错乱”）**：竖屏 push 的表单页（时间线节点 / 待办 / 案件节点的新增与编辑）绝不能自带 `NavigationStack`——被推入外层导航栈时再套一层内嵌栈会让 `dismiss()` 行为不可靠（返回错位/不返回）。正确写法：`presentedAsSheet == true` 时才包 `NavigationStack`，推入模式直接渲染 `Form`（导航栏由外层承担，与编辑案件页一致）。同时这些表单必须在 `onDisappear` 里清掉 `pad.saveEditAction = nil`，否则底部按钮卡在“保存”。
 - **竖屏钻取页导航的正确架构（路径导航，已验证）**：更多页竖屏导航必须用 `NavigationStack(path:)` + 统一路由（`enum MoreDrillRoute { case page(MoreDrillPage), detail(DetailSelection) }`）。**不要用多个 item 绑定**（多层推入会“替换”层级，左滑直接跳层）、**不要嵌套 NavigationStack**（双返回按钮）。钻取页 = `.page` 元素、子详情 = `.detail` 元素，全部走同一个 path；`Binding<DetailSelection?>` 用桥接 binding 映射到 path 追加/弹出 `.detail`；旋转恢复、嵌套 push（详情内编辑）、外部关闭详情分别用 `onChange(of: pad.isSidebar / pendingPushToken / detailSelection)` 同步。左滑返回逐级正确且每层只有一个返回按钮。
@@ -139,6 +141,10 @@ func shouldSuppressKeyboard() -> Bool { Date() < suppressKeyboardUntil }
    - 若某 App 不想要底部标签栏、希望 iPad 保持系统原生（自适应标签栏 + 右上角搜索），则不要对左栏套 compact；两种方案按产品需求取舍。
 4. **List 行按钮点击被“焦点跟随”手势吞掉（iOS 26）**：内容区挂的 `DragGesture(minimumDistance: 0)`（焦点跟随）会让部分设备（iOS 26，iPhone Air 的 iOS 27 正常）上 List 默认样式的行按钮点击失效（更多页、备份恢复页整页点不动）。案件列表能点是因为行按钮用了 `.buttonStyle(.plain)`。
    - **根因与根治**：手势 `minimumDistance: 0` 在按下瞬间触发状态变更（`focusedPane` 赋值 → 视图重绘）→ 取消整页点击（不止列表行，**系统返回按钮也会点不动**；iPadOS 27 / Mac / iOS 26 均实测）。**根治：手势改为 `minimumDistance: 4` 且仅在值变化时赋值**，点按不再触发、滚动仍触发焦点跟随。
+   - **TapGesture 焦点跟随是更大的坑（鱼律 2026-08-07 实测定论）**：在 Tab 根视图 / 副屏挂“点击任意处 → 切换 `focusedPane`”的 `TapGesture().onEnded { pad.focusedPane = .main/.sidebar }`，会让**所有 push 进导航栈的页面**里的原生控件（Form/List 的 Picker 行、SwiftUI Button 行：日期/电话/公司搜索/添加参与人等）点击事件被吞——点击有按压反馈但动作不执行，文本框（按下即聚焦）正常，根页面（列表/详情/更多首页）正常。构建 530 无此手势全部正常，588 加入后案件/委托人/参与人表单全部点不动。
+     - **根治（已验证）**：不要用 `TapGesture` 做焦点跟随，**直接移除**；需要“点击切换焦点”时只用 `DragGesture(minimumDistance: 4)`（值变化才赋值）。`DispatchQueue.main.async` 延后状态变更实测仍不稳，别依赖。移除后所有表单控件恢复正常。
+     - **不要用“Picker 改 Menu”绕**：只绕开选择器，日期/电话/公司搜索仍坏，且偏离原生行为；根因手势移除后原生 Picker 直接可用。
+     - 判据：根页面正常、push 页面整页控件（选择器/按钮）点不动、文本框正常 = 根视图 TapGesture 焦点手势吞点击。
    - 兜底：行按钮用**自定义纯 SwiftUI 样式**（`contentShape(Rectangle())` 保证整行可点 + 按压反馈），不要用 List 默认行按钮样式；应用在更多页及其钻取子页（委托人管理 / 委托人案件 / 文书下载 / 备份恢复等）的 List 上。
    - 判据：整页（含返回按钮）点不动 = 手势吞点击；仅文字可点 = 行按钮样式问题。
 
